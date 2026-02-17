@@ -26,7 +26,8 @@ export async function extractFinancialData(base64Images: string[]) {
   1. Identify the table headers to find all Fiscal Years (e.g., FY25, FY24, 2024, 2023).
   2. For every years column found, extract the value for each line item row.
   3. Structure the output strictly according to this JSON schema:
-     - records: Array of objects with { category, subCategory, lineItem, year, value, unit, confidence }
+     - records: Array of objects with { category: string, subCategory: string, lineItem: string, year: string, value: number, unit: string, confidence: "High" | "Medium" | "Low" }
+     - yearsDetected: Array of strings finding all unique years (e.g., ["FY25", "FY24"])
   
   **Rules:**
   - If a value is missing or '-', represent it as null or omit.
@@ -50,6 +51,9 @@ export async function extractFinancialData(base64Images: string[]) {
         const text = response.text();
 
         // Parse JSON to validate against our Zod schema
+        console.log("----------------------------------------");
+        console.log("Gemini Raw Response:", text);
+        console.log("----------------------------------------");
         const json = JSON.parse(text);
         return json;
     } catch (error) {

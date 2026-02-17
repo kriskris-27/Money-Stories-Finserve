@@ -85,27 +85,37 @@ export default function App() {
     };
 
     // Helper to pivot data for display
+    // Helper to pivot data for display
     const getPivotedData = () => {
         if (!data || !data.records) return { headers: [], rows: [] };
 
         // 1. Get all unique years (sorted descending)
-        const years = Array.from(new Set(data.records.flatMap((r: any) => r.values.map((v: any) => v.year)))).sort().reverse();
+        const years = Array.from(new Set(data.records.map((r: any) => r.year))).sort().reverse();
 
-        // 2. Build rows
-        const rows = data.records.map((r: any) => {
-            const row: any = {
-                category: r.category,
-                subCategory: r.subCategory,
-                lineItem: r.lineItem,
-                confidence: r.confidence,
-                unit: r.unit
-            };
-            years.forEach((y: any) => {
-                const val = r.values.find((v: any) => v.year === y);
-                row[y] = val ? val.value : '-';
-            });
-            return row;
+        // 2. Group records by key (Category + SubCategory + LineItem) to merge years into one row
+        const grouped = new Map();
+
+        data.records.forEach((r: any) => {
+            const key = `${r.category}-${r.subCategory}-${r.lineItem}`;
+            if (!grouped.has(key)) {
+                grouped.set(key, {
+                    category: r.category,
+                    subCategory: r.subCategory,
+                    lineItem: r.lineItem,
+                    confidence: r.confidence,
+                    unit: r.unit,
+                    // Initialize years with '-'
+                    ...Object.fromEntries(years.map((y: any) => [y, '-']))
+                });
+            }
+            // Update the specific year value
+            const entry = grouped.get(key);
+            entry[r.year] = r.value;
+            // conservative confidence (if any value is low, row is low - optional logic, keeping simple for now)
+            if (r.confidence === 'Low') entry.confidence = 'Low';
         });
+
+        const rows = Array.from(grouped.values());
 
         return { headers: years, rows };
     };
@@ -202,7 +212,9 @@ export default function App() {
                                             </TableCell>
                                             {headers.map((year: any) => (
                                                 <TableCell key={year} className="text-right font-mono text-slate-600">
-                                                    {row[year] !== '-' ? row[year].toLocaleString() : '-'}
+                                                    {(row[year] !== '-' && row[year] !== null && row[year] !== undefined) ?
+                                                        row[year].toLocaleString() :
+                                                        '-'}
                                                 </TableCell>
                                             ))}
                                             <TableCell className="text-right align-top">
