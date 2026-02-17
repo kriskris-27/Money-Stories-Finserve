@@ -1,14 +1,19 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { ExtractionResultSchema } from "@/lib/schema";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+// Initialize lazily to avoid crash if key is missing at build time
+const getGenAI = () => {
+    const key = process.env.GEMINI_API_KEY;
+    if (!key) throw new Error("GEMINI_API_KEY is not set in environment variables");
+    return new GoogleGenerativeAI(key);
+};
 
 export async function extractFinancialData(base64Images: string[]) {
     if (!process.env.GEMINI_API_KEY) {
         throw new Error("GEMINI_API_KEY is not set");
     }
 
-    const model = genAI.getGenerativeModel({
+    const model = getGenAI().getGenerativeModel({
         model: "gemini-1.5-flash",
         // Set response to JSON mode for structured output
         generationConfig: { responseMimeType: "application/json" }

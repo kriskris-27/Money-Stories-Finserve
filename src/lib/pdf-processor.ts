@@ -21,7 +21,7 @@ export async function convertPdfToImages(file: File): Promise<string[]> {
 
         if (!context) continue;
 
-        const renderContext = {
+        const renderContext: any = {
             canvasContext: context,
             viewport: viewport,
         };
