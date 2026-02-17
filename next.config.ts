@@ -1,12 +1,16 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+    // Allow external scripts for PDF.js CDN if needed (usually handled by browser)
+    webpack: (config) => {
+        config.resolve.alias.canvas = false;
+        return config;
+    },
     experimental: {
         serverActions: {
-            bodySizeLimit: '10mb', // Increase limit for image payloads
+            bodySizeLimit: "50mb",
         },
     },
-    // Allow external scripts for PDF.js CDN if needed (usually handled by browser)
 };
 
 export default nextConfig;

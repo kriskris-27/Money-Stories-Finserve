@@ -1,9 +1,11 @@
-import * as pdfjsLib from 'pdfjs-dist';
-
-// Use CDN worker for maximum portability in Next.js
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-
+// Use dynamic import to avoid SSR issues with canvas dependency
 export async function convertPdfToImages(file: File): Promise<string[]> {
+    const pdfjsLib = await import('pdfjs-dist');
+
+    // Use CDN worker for maximum portability in Next.js
+    // @ts-ignore - workerSrc property exists on GlobalWorkerOptions
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
@@ -14,6 +16,7 @@ export async function convertPdfToImages(file: File): Promise<string[]> {
         const page = await pdf.getPage(i);
         const viewport = page.getViewport({ scale: 2.0 }); // High resolution for OCR
 
+        // Create canvas
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d');
         canvas.height = viewport.height;

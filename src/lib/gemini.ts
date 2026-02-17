@@ -14,7 +14,7 @@ export async function extractFinancialData(base64Images: string[]) {
     }
 
     const model = getGenAI().getGenerativeModel({
-        model: "gemini-1.5-flash",
+        model: process.env.GEMINI_MODEL || "gemini-1.5-flash-latest",
         // Set response to JSON mode for structured output
         generationConfig: { responseMimeType: "application/json" }
     });
