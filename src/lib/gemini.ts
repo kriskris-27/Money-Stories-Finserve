@@ -1,0 +1,54 @@
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { ExtractionResultSchema } from "@/lib/schema";
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+
+export async function extractFinancialData(base64Images: string[]) {
+    if (!process.env.GEMINI_API_KEY) {
+        throw new Error("GEMINI_API_KEY is not set");
+    }
+
+    const model = genAI.getGenerativeModel({
+        model: "gemini-1.5-flash",
+        // Set response to JSON mode for structured output
+        generationConfig: { responseMimeType: "application/json" }
+    });
+
+    const prompt = `
+  You are an expert financial analyst. Your job is to extract the 'Income Statement' or 'Statement of Profit and Loss' from these images.
+  
+  **Instructions:**
+  1. Identify the table headers to find all Fiscal Years (e.g., FY25, FY24, 2024, 2023).
+  2. For every years column found, extract the value for each line item row.
+  3. Structure the output strictly according to this JSON schema:
+     - records: Array of objects with { category, subCategory, lineItem, year, value, unit, confidence }
+  
+  **Rules:**
+  - If a value is missing or '-', represent it as null or omit.
+  - Normalize numbers: If the header says "in Crores" and value is "5.5", keep it as 5.5 but set unit="Crores".
+  - If the image is blurry, set confidence="Low".
+  - Do NOT hallucinate data. If you can't read it, skip it.
+  - Group items logically under 'Revenue', 'Expenses', 'Profit', etc.
+  `;
+
+    // Prepare image parts for the API
+    const imageParts = base64Images.map((base64) => ({
+        inlineData: {
+            data: base64,
+            mimeType: "image/jpeg",
+        },
+    }));
+
+    try {
+        const result = await model.generateContent([prompt, ...imageParts]);
+        const response = await result.response;
+        const text = response.text();
+
+        // Parse JSON to validate against our Zod schema
+        const json = JSON.parse(text);
+        return json;
+    } catch (error) {
+        console.error("Gemini API Error:", error);
+        throw new Error("Failed to extract data from Gemini.");
+    }
+}
