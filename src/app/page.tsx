@@ -68,9 +68,9 @@ export default function App() {
         // Flatten for Excel
         const excelData = rows.map((r: any) => {
             const flat: any = {
+                Particulars: r.lineItem,
                 Category: r.category,
                 SubCategory: r.subCategory || '',
-                Particulars: r.lineItem,
                 Unit: r.unit || '',
                 Confidence: r.confidence
             };
