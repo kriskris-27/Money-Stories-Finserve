@@ -46,18 +46,41 @@ export async function extractFinancialData(base64Images: string[]) {
     }));
 
     try {
-        const result = await model.generateContent([prompt, ...imageParts]);
-        const response = await result.response;
-        const text = response.text();
+        // Helper for retry logic
+        const MAX_RETRIES = 3;
+        let lastError;
 
-        // Parse JSON to validate against our Zod schema
-        console.log("----------------------------------------");
-        console.log("Gemini Raw Response:", text);
-        console.log("----------------------------------------");
-        const json = JSON.parse(text);
-        return json;
+        const promptConfig = [prompt, ...imageParts];
+
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                console.log(`Sending prompt to Gemini (Attempt ${attempt}/${MAX_RETRIES})...`);
+                const result = await model.generateContent(promptConfig);
+                const response = await result.response;
+                const text = response.text();
+
+                // Parse JSON to validate against our Zod schema
+                console.log("----------------------------------------");
+                console.log("Gemini Raw Response:", text);
+                console.log("----------------------------------------");
+
+                const json = JSON.parse(text);
+                return json; // Success!
+
+            } catch (error: any) {
+                console.warn(`Gemini API Error (Attempt ${attempt}):`, error.message);
+                lastError = error;
+                // Simple exponential backoff: 1s, 2s, 4s...
+                if (attempt < MAX_RETRIES) {
+                    const delay = 1000 * Math.pow(2, attempt - 1);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+        }
+
+        throw lastError || new Error("Failed to extract data from Gemini after retries.");
     } catch (error) {
-        console.error("Gemini API Error:", error);
+        console.error("Gemini API Error (Final):", error);
         throw new Error("Failed to extract data from Gemini.");
     }
 }

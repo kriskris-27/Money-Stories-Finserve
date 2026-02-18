@@ -7,7 +7,16 @@ export async function convertPdfToImages(file: File): Promise<string[]> {
     pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
     const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+    let pdf;
+    try {
+        pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    } catch (error: any) {
+        if (error.name === 'PasswordException') {
+            throw new Error("This PDF is password protected. Please unlock it and try again.");
+        }
+        throw new Error("Failed to load PDF. The file might be corrupted.");
+    }
 
     const images: string[] = [];
     const totalPages = Math.min(pdf.numPages, 5); // Limit to first 5 pages for MVP
