@@ -2,6 +2,23 @@
 
 This project is an **AI-powered Research Tool** designed to extract structured financials (Income Statements) from unstructured PDF documents, including scanned files.
 
+## System Design & Architecture
+### 1. Privacy First (In-Memory Processing)
+- **Zero-Persistence:** Files are processed entirely in RAM and never written to disk or S3.
+- **Ephemeral:** Once the session ends, the data is gone. Perfect for sensitive financial documents.
+
+### 2. Reliability Patterns
+- **Retry with Backoff:** The Gemini client implements exponential backoff (1s -> 2s -> 4s) to handle API rate limits gracefully.
+- **Circuit Breaking:** The UI prevents re-submission while processing to avoid thundering herd issues.
+- **Type Safety:** Strict Zod validation ensures no "garbage" JSON ever reaches the UI layer.
+
+### 3. Known Limitations (The "Real World" Gaps)
+*Features required for a commercial V1:*
+1.  **Async Queue (BullMQ/Redis):** Currently synchronous. For large files (50+ pages), we need background processing to prevent HTTP timeouts.
+2.  **Auth & Rate Limiting:** No user accounts. We rely on basic client-side limits.
+3.  **PDF Pre-processing:** No auto-rotation or "deskewing" for bad scans.
+4.  **Database Layer:** Extracted data is not saved. Reloading the page loses the analysis.
+
 built with **Next.js 16**, **Tailwind CSS**, **Gemini 1.5 Flash (Vision)**, and **PDF.js**.
 
 ## Features
