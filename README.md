@@ -67,8 +67,18 @@ Instead of traditional OCR + Regex (which fails on complex layouts), we use **Ge
 -   **Client-Side Processing**: PDF rendering happens in the browser (`pdfjs-dist`), reducing server load and avoiding complex server-side image dependencies.
 -   **Confidence Scores**: Every extracted row includes a confidence level ("High", "Medium", "Low") to guide manual review.
 
-### Why Next.js Server Actions?
-We use Server Actions to securely handle the API key and AI processing on the backend, keeping the client lightweight and type-safe.
+## Deployment
+
+### Vercel (Recommended)
+1.  Push your code to GitHub.
+2.  Import the project in Vercel.
+3.  Add the Environment Variables (`GEMINI_API_KEY`, `UPSTASH_REDIS_REST_URL`, etc.).
+4.  Click **Deploy**.
+
+## Security & Privacy
+-   **In-Memory Processing:** Files are processed in RAM and never saved to disk.
+-   **Rate Limiting:** IP-based limiting prevents abuse.
+-   **Zod Validation:** Strict schema enforcement prevents data corruption.
 
 ## License
 MIT

@@ -1,4 +1,11 @@
 // Use dynamic import to avoid SSR issues with canvas dependency
+/**
+ * Converts a PDF file into an array of Base64-encoded JPEG images.
+ * This function runs entirely in the browser (client-side) using pdfjs-dist.
+ * 
+ * @param file - The PDF file object from the file input.
+ * @returns Promise<string[]> - Array of base64 strings (one per page).
+ */
 export async function convertPdfToImages(file: File): Promise<string[]> {
     const pdfjsLib = await import('pdfjs-dist');
 

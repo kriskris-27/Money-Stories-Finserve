@@ -78,12 +78,26 @@ export default function App() {
             // Add years at the end
             headers.forEach((h: any) => flat[h] = r[h]);
 
+
             return flat;
         });
 
-        const ws = XLSX.utils.json_to_sheet(excelData);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Financials");
+
+        // 1. Summary Sheet (Metadata)
+        const summaryData = [
+            { Key: "File Name", Value: pdfFile?.name || "Unknown" },
+            { Key: "Extraction Date", Value: new Date().toLocaleDateString() },
+            { Key: "AI Model", Value: "Gemini 1.5 Flash (Vision)" },
+            { Key: "Confidence Score", Value: "Based on AI Analysis" }
+        ];
+        const wsSummary = XLSX.utils.json_to_sheet(summaryData);
+        XLSX.utils.book_append_sheet(wb, wsSummary, "Summary");
+
+        // 2. Data Sheet
+        const wsData = XLSX.utils.json_to_sheet(excelData);
+        XLSX.utils.book_append_sheet(wb, wsData, "Financials");
+
         XLSX.writeFile(wb, "Extracted_Financials.xlsx");
     };
 

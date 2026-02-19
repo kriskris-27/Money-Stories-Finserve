@@ -3,6 +3,17 @@
 import { extractFinancialData } from "@/lib/gemini";
 import { ExtractionResultSchema } from "@/lib/schema";
 
+/**
+ * Server Action to process financial document images using Gemini Vision.
+ * 
+ * Features:
+ * 1. Validates input (max 5 images).
+ * 2. Calls Google Gemini 1.5 Flash with a structured prompt.
+ * 3. Enforces strict Zod schema validation on the output.
+ * 
+ * @param images - Array of base64 image strings.
+ * @returns ValidationResult - Success flag, data object, or error message.
+ */
 export async function processFinancialStatement(images: string[]) {
     try {
         if (!images || images.length === 0) {
