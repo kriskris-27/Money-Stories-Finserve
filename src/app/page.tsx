@@ -63,6 +63,15 @@ export default function App() {
         }
     };
 
+    const handleReset = () => {
+        setData(null);
+        setPdfFile(null);
+        setStatus('');
+        setProgress(0);
+        setError(null);
+        setLoading(false);
+    };
+
     const handleDownloadExcel = () => {
         if (!data || !data.records) return;
 
@@ -201,9 +210,14 @@ export default function App() {
                             <CardTitle>Extracted Financials</CardTitle>
                             <p className="text-sm text-muted-foreground">found {yearsDetected()} data points</p>
                         </div>
-                        <Button onClick={handleDownloadExcel} className="gap-2 shadow-sm">
-                            <Download className="h-4 w-4" /> Export Excel
-                        </Button>
+                        <div className="flex gap-2">
+                            <Button variant="outline" onClick={handleReset} className="gap-2 shadow-sm">
+                                <Upload className="h-4 w-4" /> New Document
+                            </Button>
+                            <Button onClick={handleDownloadExcel} className="gap-2 shadow-sm">
+                                <Download className="h-4 w-4" /> Export Excel
+                            </Button>
+                        </div>
                     </CardHeader>
                     <CardContent className="p-0">
                         <div className="rounded-b-md">
