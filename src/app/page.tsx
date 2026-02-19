@@ -19,10 +19,13 @@ export default function App() {
     const [data, setData] = useState<any>(null);
     const [error, setError] = useState<string | null>(null);
     const [userKey, setUserKey] = useState('');
+    const [pdfFile, setPdfFile] = useState<File | null>(null);
 
     const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
+
+        setPdfFile(file);
 
         // Optional: Validation for API Key if env is missing (for reviewer)
         // For now we assume env is set or we proceed.
