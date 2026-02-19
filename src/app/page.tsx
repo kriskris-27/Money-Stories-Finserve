@@ -1,7 +1,8 @@
 'use client';
+// Triggering rebuild after file restoration
 
 import { useState } from 'react';
-import { convertPdfToImages } from '@/lib/pdf-processor';
+import { convertPdfToImages, extractTextWithCoordinates } from '@/lib/pdf-processor';
 import { processFinancialStatement } from '@/app/actions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -37,14 +38,18 @@ export default function App() {
         setData(null);
 
         try {
-            // 1. Convert PDF to Images
-            const images = await convertPdfToImages(file);
+            // 1. Convert PDF to Images & Extract Text Layout
+            const imagesPromise = convertPdfToImages(file);
+            const textDataPromise = extractTextWithCoordinates(file);
+
+            const [images, textData] = await Promise.all([imagesPromise, textDataPromise]);
+
             setProgress(40);
-            setStatus(`Analyzing ${images.length} pages via Gemini Vision...`);
+            setStatus(`Analyzing ${images.length} pages via Hybrid Engine...`);
 
             // 2. Send to Server Action
             // Note: In real app, we might pass userKey if we wanted BYO-Key support
-            const result = await processFinancialStatement(images);
+            const result = await processFinancialStatement(images, textData);
 
             if (result.success) {
                 setProgress(100);

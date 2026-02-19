@@ -7,7 +7,7 @@ import {
     RawRecord
 } from "./schema";
 import { normalizeRecords } from "./normalization";
-import { layoutEngine, GridRow } from "./layout-engine";
+import { layoutEngine, GridRow } from "@/lib/layout-engine";
 
 // Initialize Gemini
 const getGenAI = () => {
@@ -104,10 +104,10 @@ export async function runExtractionPipeline(base64Images: string[], textData: an
     // We map every row to an array of size [totalColumns], filling empty spots.
     const totalColumns = gridColumns.length;
 
-    const gridRepresentation = gridRows.map((r, i) => {
+    const gridRepresentation = gridRows.map((r: GridRow, i: number) => {
         // Create dense row
         const denseRow = new Array(totalColumns).fill("");
-        r.cells.forEach(cell => {
+        r.cells.forEach((cell: any) => {
             if (cell.colIndex !== undefined && cell.colIndex >= 0 && cell.colIndex < totalColumns) {
                 denseRow[cell.colIndex] = cell.text;
             }
@@ -159,7 +159,7 @@ export async function runExtractionPipeline(base64Images: string[], textData: an
         classification.columns.forEach((classCol: any) => {
             if (classCol.type === "year" && classCol.year) {
                 // Find the cell in this row that matches the column index
-                const cell = gridRow.cells.find(c => c.colIndex === classCol.index);
+                const cell = gridRow.cells.find((c: any) => c.colIndex === classCol.index);
                 const value = cell ? cell.text : null; // If no cell at this index, value is null/missing
 
                 if (value) {
