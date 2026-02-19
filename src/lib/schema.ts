@@ -8,9 +8,9 @@ export const FinancialRecordSchema = z.object({
     lineItem: z.string().describe("The specific row label, e.g., 'Power and Fuel'"),
     year: z.string().regex(/^(FY\s?\d{2,4}|\d{4})$/i).describe("Fiscal Year, e.g., 'FY24', '2024'"),
     value: z.number().nullable().describe("The numerical value. Normalize to base units if possible, or keep as displayed."),
-    unit: z.string().nullable().optional().describe("Currency or unit, e.g., 'INR', 'USD', 'Crores'"),
-    confidence: z.enum(["High", "Medium", "Low"]).describe("Confidence in the extraction of this specific value"),
-    sourceSnippet: z.string().optional().describe("The text snippet or context where this number was found")
+    unit: z.string().nullable().describe("Currency or Unit (e.g., INR, USD, Crores)"),
+    confidence: z.enum(["High", "Medium", "Low"]).describe("Confidence level of the extraction"),
+    sourceSnippet: z.string().optional().describe("The exact text seen in the image providing evidence for this record")
 });
 
 // --- 2. The API Response Structure ---
