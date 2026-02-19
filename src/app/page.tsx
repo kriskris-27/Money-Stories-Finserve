@@ -74,7 +74,10 @@ export default function App() {
                 Unit: r.unit || '',
                 Confidence: r.confidence
             };
+
+            // Add years at the end
             headers.forEach((h: any) => flat[h] = r[h]);
+
             return flat;
         });
 
