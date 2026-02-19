@@ -1,7 +1,7 @@
 'use server'
 
-import { extractFinancialData } from "@/lib/gemini";
-import { ExtractionResultSchema } from "@/lib/schema";
+import { runExtractionPipeline } from "@/lib/pipeline";
+import { CleanExtractionSchema } from "@/lib/schema";
 
 /**
  * Server Action to process financial document images using Gemini Vision.
@@ -25,10 +25,10 @@ export async function processFinancialStatement(images: string[]) {
 
         console.log(`Processing ${limitedImages.length} images with Gemini Vision...`);
 
-        const data = await extractFinancialData(limitedImages);
+        const data = await runExtractionPipeline(limitedImages);
 
         // Validate with Zod
-        const validation = ExtractionResultSchema.safeParse(data);
+        const validation = CleanExtractionSchema.safeParse(data);
 
         if (!validation.success) {
             console.error("Zod Validation Error:", validation.error);

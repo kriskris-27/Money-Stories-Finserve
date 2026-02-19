@@ -198,8 +198,13 @@ export default function App() {
             {error && (
                 <Alert variant="destructive">
                     <AlertTriangle className="h-4 w-4" />
-                    <AlertTitle>Extraction Failed</AlertTitle>
-                    <AlertDescription>{error}</AlertDescription>
+                    <div className="flex-1">
+                        <AlertTitle>Extraction Failed</AlertTitle>
+                        <AlertDescription>{error}</AlertDescription>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={handleReset} className="ml-4 bg-white text-destructive hover:bg-destructive/10 border-destructive/20">
+                        Try Again
+                    </Button>
                 </Alert>
             )}
 

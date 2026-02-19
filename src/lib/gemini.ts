@@ -1,5 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { ExtractionResultSchema } from "@/lib/schema";
+// Import schemas and normalization
+import { RawExtractionSchema, CleanExtractionSchema } from "./schema";
+import { normalizeRecords } from "./normalization";
 
 // Initialize lazily to avoid crash if key is missing at build time
 const getGenAI = () => {
@@ -21,86 +23,26 @@ export async function extractFinancialData(base64Images: string[]) {
     });
 
     const prompt = `
-You are a strict financial data extraction engine.
+You are a financial data extraction engine.
 
-Your ONLY job is to extract financial data that is EXPLICITLY visible in the provided images.
+STRICT RULES:
+- Extract ONLY data that is clearly visible in the image.
+- DO NOT guess or infer.
+- If no table exists → return empty records.
 
--------------------------
-CRITICAL RULES (HARD CONSTRAINTS)
--------------------------
+Each record MUST include:
+- lineItem
+- year (as seen in image)
+- value (as seen)
+- sourceSnippet (exact text)
 
-1. DO NOT GUESS OR INFER ANY VALUES.
-2. DO NOT GENERATE SAMPLE OR TYPICAL FINANCIAL DATA.
-3. IF NO INCOME STATEMENT TABLE IS PRESENT, RETURN EMPTY RESULT.
-4. EVERY VALUE MUST HAVE VERIFIABLE EVIDENCE FROM THE IMAGE.
-5. IF YOU CANNOT SEE THE EXACT NUMBER, DO NOT INCLUDE IT.
-6. NEVER FILL MISSING DATA.
-7. NEVER "COMPLETE" A STATEMENT.
-
--------------------------
-VALID EXTRACTION CONDITIONS
--------------------------
-
-Only extract data IF:
-- A clear table exists
-- Rows like "Revenue", "Expenses", "Profit", "EPS" are visible
-- Numerical columns are clearly readable
-
-If these are NOT present → RETURN EMPTY OUTPUT.
-
--------------------------
-OUTPUT FORMAT (STRICT JSON)
--------------------------
-
-If data is found:
-
-{
-  "records": [
-    {
-      "category": "Revenue | Expenses | Profit | Other",
-      "subCategory": string | null,
-      "lineItem": string,
-      "year": string,
-      "value": number,
-      "unit": string,
-      "confidence": "High" | "Medium" | "Low",
-      "sourceSnippet": string
-    }
-  ],
-  "yearsDetected": string[],
-  "notes": "Extracted from visible table"
-}
-
--------------------------
-IF NO DATA FOUND (IMPORTANT)
--------------------------
-
-If the images DO NOT contain an income statement table:
-
-Return EXACTLY:
+If no data is found:
 
 {
   "records": [],
   "yearsDetected": [],
-  "notes": "No income statement or financial table found in the document"
+  "notes": "No financial table found"
 }
-
--------------------------
-EVIDENCE REQUIREMENT
--------------------------
-
-For EVERY record:
-- Include "sourceSnippet" containing the EXACT text seen in the image
-- If you cannot provide sourceSnippet → DO NOT include that record
-
--------------------------
-FINAL CHECK BEFORE RESPONSE
--------------------------
-
-Ask yourself:
-"Did I actually SEE these numbers in the image?"
-
-If NOT → return empty result.
 `;
 
     // Prepare image parts for the API
@@ -112,64 +54,44 @@ If NOT → return empty result.
     }));
 
     try {
-        // Helper for retry logic
-        const MAX_RETRIES = 3;
-        let lastError;
-
         const promptConfig = [prompt, ...imageParts];
 
-        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-            try {
-                console.log(`Sending prompt to Gemini (Attempt ${attempt}/${MAX_RETRIES})...`);
-                const result = await model.generateContent(promptConfig);
-                const response = await result.response;
-                let text = response.text();
+        console.log("Sending prompt to Gemini...");
+        const result = await model.generateContent(promptConfig);
+        const response = await result.response;
+        let text = response.text();
 
-                // Clean markdown code blocks if present (since we removed JSON mode)
-                text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        // Clean markdown code blocks if present
+        text = text.replace(/```json/g, '').replace(/```/g, '').trim();
 
-                console.log("----------------------------------------");
-                console.log("Gemini Raw Response:", text);
-                console.log("----------------------------------------");
+        console.log("----------------------------------------");
+        console.log("Gemini Raw Response:", text);
+        console.log("----------------------------------------");
 
-                const json = JSON.parse(text);
+        const raw = JSON.parse(text);
 
-                // HARD VALIDATION LAYER
-
-                // 1. Evidence Check
-                if (json.records?.length > 0 && json.records.some((r: any) => !r.sourceSnippet)) {
-                    console.warn("Hallucination check failed: Record missing sourceSnippet");
-                    // We could throw here, or filter out bad records. For now, strict reject.
-                    throw new Error("Hallucination detected: AI failed to provide evidence for extracted data.");
-                }
-
-                // 2. Keyword Check (Basic sanity)
-                const hasKeywords = json.records?.some((r: any) =>
-                    /revenue|expense|profit|income|cost|tax|result|loss/i.test(r.lineItem || "") ||
-                    /revenue|expense|profit|income|cost|tax|result|loss/i.test(r.category || "")
-                );
-
-                if (json.records?.length > 0 && !hasKeywords) {
-                    console.warn("Hallucination check failed: No financial keywords found in records");
-                    throw new Error("Invalid extraction: Data detected but lacks financial context (Revenue/Profit/Cost).");
-                }
-
-                return json; // Success!
-
-            } catch (error: any) {
-                console.warn(`Gemini API Error (Attempt ${attempt}):`, error.message);
-                lastError = error;
-                // Simple exponential backoff: 1s, 2s, 4s...
-                if (attempt < MAX_RETRIES) {
-                    const delay = 1000 * Math.pow(2, attempt - 1);
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                }
-            }
+        // Step 1: Validate raw (loose)
+        const rawParsed = RawExtractionSchema.safeParse(raw);
+        if (!rawParsed.success) {
+            console.error("Raw Validation Error:", rawParsed.error);
+            throw new Error("Raw extraction failed: Output did not match basic structure.");
         }
 
-        throw lastError || new Error("Failed to extract data from Gemini after retries.");
-    } catch (error) {
-        console.error("Gemini API Error (Final):", error);
-        throw new Error("Failed to extract data from Gemini.");
+        // Step 2: Normalize
+        const normalized = normalizeRecords(rawParsed.data);
+
+        // Step 3: Validate clean (strict)
+        const cleanParsed = CleanExtractionSchema.safeParse(normalized);
+
+        if (!cleanParsed.success) {
+            console.error("Clean Validation Error:", cleanParsed.error);
+            throw new Error("Clean validation failed: Normalized data does not meet strict schema.");
+        }
+
+        return cleanParsed.data;
+
+    } catch (error: any) {
+        console.error("Gemini API Error:", error);
+        throw new Error(`Failed to extract data: ${error.message}`);
     }
 }
