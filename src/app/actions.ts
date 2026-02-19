@@ -12,9 +12,10 @@ import { CleanExtractionSchema } from "@/lib/schema";
  * 3. Enforces strict Zod schema validation on the output.
  * 
  * @param images - Array of base64 image strings.
+ * @param textData - Array of text items with coordinates.
  * @returns ValidationResult - Success flag, data object, or error message.
  */
-export async function processFinancialStatement(images: string[]) {
+export async function processFinancialStatement(images: string[], textData: any[]) {
     try {
         if (!images || images.length === 0) {
             return { success: false, error: "No images provided." };
@@ -25,7 +26,7 @@ export async function processFinancialStatement(images: string[]) {
 
         console.log(`Processing ${limitedImages.length} images with Gemini Vision...`);
 
-        const data = await runExtractionPipeline(limitedImages);
+        const data = await runExtractionPipeline(limitedImages, textData);
 
         // Validate with Zod
         const validation = CleanExtractionSchema.safeParse(data);

@@ -2,11 +2,12 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import {
     TableDetectionSchema,
-    TableStructureSchema,
     TableClassificationSchema,
-    CleanExtractionSchema
+    CleanExtractionSchema,
+    RawRecord
 } from "./schema";
 import { normalizeRecords } from "./normalization";
+import { layoutEngine, GridRow } from "./layout-engine";
 
 // Initialize Gemini
 const getGenAI = () => {
@@ -65,40 +66,9 @@ Return JSON:
 }
 `;
 
-const EXTRACT_PROMPT = `
-You are a data extraction engine.
-Extract the table structure precisely.
-
-CRITICAL RULES:
-- Extract strict Rows and Columns.
-- values array length MUST match columns length.
-- Preserve exact text for values (e.g. "1,234", "(50)").
-- Do NOT infer missing numbers.
-
-Return JSON:
-{
-  "columns": [{ "index": number, "label": string }],
-  "rows": [{ "index": number, "lineItem": string, "values": string[] }]
-}
-`;
-
-const CLASSIFY_PROMPT = `
-You are a financial analyst.
-Classify the structure provided in the image context.
-
-1. Columns: Identify if they are Years (FY24), Quarters (Q1), or specific dates. Normalize year to "YYYY".
-2. Rows: Categorize into Revenue, Expenses, Profit, or Other.
-
-Return JSON:
-{
-  "columns": [{ "index": number, "type": "year" | "quarter", "year": "YYYY" }],
-  "rows": [{ "index": number, "category": "Revenue" | "Expenses" | "Profit" | "Other" }]
-}
-`;
-
 // --- MAIN PIPELINE ---
 
-export async function runExtractionPipeline(base64Images: string[]) {
+export async function runExtractionPipeline(base64Images: string[], textData: any[]) {
     const model = getGenAI().getGenerativeModel({
         model: process.env.GEMINI_MODEL || "gemini-1.5-flash",
         generationConfig: { temperature: 0 }
@@ -108,7 +78,7 @@ export async function runExtractionPipeline(base64Images: string[]) {
         inlineData: { data: b64, mimeType: "image/jpeg" }
     }));
 
-    // STEP 1: DETECT
+    // STEP 1: DETECT (Vision is best for "Is there a table?")
     const detection = await callGemini(model, DETECT_PROMPT, imageParts, TableDetectionSchema, "DETECTION");
 
     if (!detection.hasTable || detection.confidence === "low") {
@@ -116,49 +86,100 @@ export async function runExtractionPipeline(base64Images: string[]) {
         return { records: [], yearsDetected: [], notes: "No financial table detected." };
     }
 
-    // STEP 2: EXTRACT STRUCTURE
-    const structure = await callGemini(model, EXTRACT_PROMPT, imageParts, TableStructureSchema, "EXTRACTION");
+    // STEP 2: EXTRACT STRUCTURE (DETERMINISTIC LAYOUT ENGINE)
+    console.log("Building Deterministic Grid from Text Layout...");
 
-    // Basic Validation: Check dimensions
-    if (structure.rows.some((r: any) => r.values.length !== structure.columns.length)) {
-        console.warn("Structure Mismatch: Row values count != Column count. Attempting best effort merge.");
+    // CRITICAL FIX: Filter textData to only the first page (Page 1) to avoid massive context
+    // In future this should be smarter
+    const page1Text = textData.filter(t => t.page === 1);
+
+    if (page1Text.length === 0) {
+        console.warn("No text found on Page 1. Layout engine might fail.");
     }
 
-    // STEP 3: CLASSIFY SEMANTICS
-    const classification = await callGemini(model, CLASSIFY_PROMPT, imageParts, TableClassificationSchema, "CLASSIFICATION");
+    // layoutEngine.buildGrid returns rows with cells assigned to 'colIndex'
+    const { rows: gridRows, headers: gridColumns } = layoutEngine.buildGrid(page1Text);
+
+    // Create a DENSE visual representation for the LLM
+    // We map every row to an array of size [totalColumns], filling empty spots.
+    const totalColumns = gridColumns.length;
+
+    const gridRepresentation = gridRows.map((r, i) => {
+        // Create dense row
+        const denseRow = new Array(totalColumns).fill("");
+        r.cells.forEach(cell => {
+            if (cell.colIndex !== undefined && cell.colIndex >= 0 && cell.colIndex < totalColumns) {
+                denseRow[cell.colIndex] = cell.text;
+            }
+        });
+        return `Row ${i}: | ${denseRow.join(" | ")} |`;
+    }).join("\n");
+
+    const GRID_CONTEXT_PROMPT = `
+    Here is the EXACT TEXT STRUCTURE extracted from the document coordinates:
+    (Empty cells are shown as empty space between pipes)
+    ${gridRepresentation}
+    
+    Based on this structure (and the visual context from images):
+    `;
+
+    // STEP 3: CLASSIFY SEMANTICS (Using the Grid Context + Vision)
+    // We update the prompt to reference the grid indices
+    const CLASSIFY_WITH_GRID_PROMPT = `
+    You are a financial analyst.
+    I have extracted the text structure into rows (indexed 0 to N).
+    
+    ${GRID_CONTEXT_PROMPT}
+
+    YOUR JOB:
+    1. Identify which Columns (by index 0 to ${totalColumns - 1}) are Years.
+    2. Identify which Rows (by index 0..N) are "Revenue", "Expenses", "Profit".
+
+    Return JSON:
+    {
+      "columns": [{ "index": number, "type": "year" | "quarter", "year": "YYYY" }],
+      "rows": [{ "index": number, "category": "Revenue" | "Expenses" | "Profit" | "Other" }]
+    }
+    `;
+
+    const classification = await callGemini(model, CLASSIFY_WITH_GRID_PROMPT, imageParts, TableClassificationSchema, "CLASSIFICATION");
 
     // STEP 4: DETERMINISTIC MERGE
-    // We merge the exact Strings from Step 2 with the Semantic Tags from Step 3
-    const rawRecords = [];
+    const rawRecords: RawRecord[] = [];
 
-    for (const row of structure.rows) {
-        // Find semantic tag for this row
-        const rowClass = classification.rows.find((r: any) => r.index === row.index);
-        const category = rowClass?.category || "Other";
+    for (const classRow of classification.rows) {
+        const gridRow = gridRows[classRow.index];
+        if (!gridRow) continue;
 
-        row.values.forEach((value: string, colIndex: number) => {
-            // Find semantic tag for this column
-            const colClass = classification.columns.find((c: any) => c.index === colIndex);
+        // Get the Line Item Name (usually the first cell that is text)
+        // Heuristic: First cell is label.
+        const lineItem = gridRow.cells[0]?.text || "Unknown";
 
-            // We only care about Year columns for now
-            if (colClass && colClass.type === "year" && colClass.year) {
-                rawRecords.push({
-                    category: category,
-                    lineItem: row.lineItem,
-                    year: colClass.year, // The normalized year from valid classification
-                    value: value,        // The exact string from extraction
-                    sourceSnippet: `${row.lineItem}: ${value}`, // Evidence
-                    confidence: "High"
-                });
+        // Iterate over the CLASSIFIED columns to find values in this row
+        classification.columns.forEach((classCol: any) => {
+            if (classCol.type === "year" && classCol.year) {
+                // Find the cell in this row that matches the column index
+                const cell = gridRow.cells.find(c => c.colIndex === classCol.index);
+                const value = cell ? cell.text : null; // If no cell at this index, value is null/missing
+
+                if (value) {
+                    rawRecords.push({
+                        category: classRow.category,
+                        lineItem: lineItem,
+                        year: classCol.year,
+                        value: value, // EXACT text from PDF
+                        sourceSnippet: `${lineItem}: ${value}`,
+                        confidence: "High",
+                        subCategory: null,
+                        unit: null
+                    });
+                }
             }
         });
     }
 
     // Step 5: Normalize & Final Clean
-    // reusing our robust normalization logic
     const normalized = normalizeRecords({ records: rawRecords });
-
-    // Final Safe Parse
     const final = CleanExtractionSchema.parse(normalized);
 
     return final;
